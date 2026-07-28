@@ -5,7 +5,7 @@ export async function onRequest(context) {
     // 如果前端是 GET 请求，说明是来【获取】数据的
     if (request.method === "GET") {
         // 从 KV 数据库读取数据，键名为 "custom_links"
-        const data = await env.NAV_DB.get("custom_links");
+        const data = await env.XYZ_DB.get("custom_links");
         return new Response(data || "[]", {
             headers: { "Content-Type": "application/json" }
         });
@@ -16,7 +16,7 @@ export async function onRequest(context) {
         try {
             const body = await request.text(); // 获取前端发来的 JSON 数据
             // 将数据存入 KV 数据库
-            await env.NAV_DB.put("custom_links", body);
+            await env.XYZ_DB.put("custom_links", body);
             return new Response(JSON.stringify({ success: true, message: "保存成功" }), {
                 headers: { "Content-Type": "application/json" }
             });
