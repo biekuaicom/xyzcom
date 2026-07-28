@@ -163,6 +163,12 @@
                 <input type="file" id="local-bg-file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" onchange="uploadLocalBackground(event)">
                 <p class="text-[10px] text-slate-500" data-i18n="uploadBgHint">图片会自动压缩并同步到全站</p>
             </div>
+
+            <div class="admin-only space-y-1.5 px-1 border-t border-slate-800 pt-3 mt-1">
+                <div class="text-[11px] text-slate-400 font-bold" data-i18n="iconRepairTitle">网址图标维护</div>
+                <button type="button" id="icon-repair-btn" onclick="repairMissingIcons()" class="w-full py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-[11px] hover:bg-sky-600/35 disabled:opacity-50 disabled:cursor-wait cursor-pointer"><i class="fas fa-wand-magic-sparkles mr-1"></i><span data-i18n="repairIcons">自动查找并修复缺失图标</span></button>
+                <p id="icon-repair-status" class="text-[10px] text-slate-500" data-i18n="repairIconsHint">扫描所有自定义网址，并批量保存找到的图标</p>
+            </div>
             
             <!-- 【新增】修改管理员密码区域 (仅管理员可见) -->
             <div class="admin-only space-y-1.5 px-1 border-t border-slate-800 pt-3 mt-1">
@@ -421,7 +427,7 @@
         const i18n = {
             zh: {
                 pageTitle: "别快智控-智能多功能响应式导航", langTitle: "语言 / Language", themeTitle: "基础色彩模式 (本地偏好)",
-                themeLight: "日间", themeDark: "夜间", layoutTitle: "区域显示模式", layoutInitial: "初始模式", layoutClean: "清爽模式", bgTitle: "自定义背景 (全站同步)", bgInputPlace: "输入图片网址 https://...", uploadBg: "上传本地背景", uploadBgHint: "图片会自动压缩并同步到全站",
+                themeLight: "日间", themeDark: "夜间", layoutTitle: "区域显示模式", layoutInitial: "初始模式", layoutClean: "清爽模式", bgTitle: "自定义背景 (全站同步)", bgInputPlace: "输入图片网址 https://...", uploadBg: "上传本地背景", uploadBgHint: "图片会自动压缩并同步到全站", iconRepairTitle: "网址图标维护", repairIcons: "自动查找并修复缺失图标", repairIconsHint: "扫描所有自定义网址，并批量保存找到的图标",
                 applyBtn: "应用", clearBg: "清除壁纸", logoutBtn: "退出后台管理", weatherLoading: "正在定位测算天气...",
                 restoreTitle: "站点恢复点", restoreNamePlace: "恢复点名称", restoreNotePlace: "备注（可选）", createRestore: "创建站点恢复点", restoreSaved: "恢复", exportRestore: "导出当前状态", importRestore: "导入恢复点", noRestorePoints: "暂无恢复点",
                 enGoogle: "谷歌 Google", enBing: "必应 Bing", enBaidu: "百度 Baidu", searchGoogle: "在 Google 中搜索...", searchBing: "在 必应 Bing 中搜索...", searchBaidu: "在 百度 Baidu 中搜索...", searchGithub: "在 GitHub 中搜索仓库...",
@@ -440,7 +446,7 @@
             },
             en: {
                 pageTitle: "TechShare - Smart Responsive Nav", langTitle: "Language / 语言", themeTitle: "Color Theme (Local Pref)",
-                themeLight: "Light", themeDark: "Dark", layoutTitle: "Section Display Mode", layoutInitial: "Initial Mode", layoutClean: "Clean Mode", bgTitle: "Custom Wallpaper (Cloud Sync)", bgInputPlace: "Image URL https://...", uploadBg: "Upload Local Background", uploadBgHint: "The image is compressed and synced to the site",
+                themeLight: "Light", themeDark: "Dark", layoutTitle: "Section Display Mode", layoutInitial: "Initial Mode", layoutClean: "Clean Mode", bgTitle: "Custom Wallpaper (Cloud Sync)", bgInputPlace: "Image URL https://...", uploadBg: "Upload Local Background", uploadBgHint: "The image is compressed and synced to the site", iconRepairTitle: "Website Icon Maintenance", repairIcons: "Find and Repair Missing Icons", repairIconsHint: "Scan all custom links and save discovered icons in bulk",
                 applyBtn: "Apply", clearBg: "Clear Wallpaper", logoutBtn: "Logout Admin", weatherLoading: "Fetching weather...",
                 restoreTitle: "Site Restore Points", restoreNamePlace: "Restore point name", restoreNotePlace: "Notes (optional)", createRestore: "Create Restore Point", restoreSaved: "Restore", exportRestore: "Export Current State", importRestore: "Import Restore Point", noRestorePoints: "No restore points",
                 enGoogle: "Google", enBing: "Bing", enBaidu: "Baidu", searchGoogle: "Search in Google...", searchBing: "Search in Bing...", searchBaidu: "Search in Baidu...", searchGithub: "Search in GitHub...",
@@ -486,6 +492,119 @@
                 ${image}
             </div>`;
         }
+
+        function imageCanLoad(url, timeout = 4500) {
+            return new Promise(resolve => {
+                if (!url) return resolve(false);
+                const image = new Image();
+                let settled = false;
+                const finish = result => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    image.onload = null;
+                    image.onerror = null;
+                    resolve(result);
+                };
+                const timer = setTimeout(() => finish(false), timeout);
+                image.referrerPolicy = 'no-referrer';
+                image.onload = () => finish(image.naturalWidth > 0 && image.naturalHeight > 0);
+                image.onerror = () => finish(false);
+                image.src = url;
+            });
+        }
+
+        async function discoverWebsiteIcon(linkUrl) {
+            let parsed;
+            try { parsed = new URL(linkUrl); }
+            catch (error) { return ''; }
+            const origin = parsed.origin;
+            const candidates = [
+                `${origin}/favicon.ico`,
+                `${origin}/favicon.png`,
+                `https://icons.duckduckgo.com/ip3/${parsed.hostname}.ico`,
+                `https://www.google.com/s2/favicons?sz=128&domain_url=${encodeURIComponent(origin)}`,
+                `https://unavatar.io/${parsed.hostname}?fallback=false`
+            ];
+            const results = await Promise.all(candidates.map(candidate => imageCanLoad(candidate)));
+            return candidates[results.findIndex(Boolean)] || '';
+        }
+
+        async function repairMissingIcons() {
+            const button = document.getElementById('icon-repair-btn');
+            const status = document.getElementById('icon-repair-status');
+            button.disabled = true;
+
+            let customItems = customLinksLoaded ? [...loadedCustomLinks] : JSON.parse(localStorage.getItem('nav_custom_links') || '[]');
+            try {
+                const response = await fetch('/api/links');
+                if (response.ok) customItems = await response.json();
+            } catch (error) {}
+            let friendItems = JSON.parse(localStorage.getItem('nav_friend_links') || '[]');
+            if (!friendItems.length) friendItems = [ { name: "IT头条博客", url: "https://it-toutiao.blogspot.com" }, { name: "科技共享导航", url: "https://kjgx.168668520.xyz" } ];
+
+            const jobs = [];
+            customItems.forEach(item => { if (item.type !== 'text' && item.url) jobs.push({ item, source: 'custom' }); });
+            (cloudConfig.dynamicSections || []).forEach(section => {
+                (section.links || []).forEach(item => { if (item.type !== 'text' && item.url) jobs.push({ item, source: 'dynamic' }); });
+            });
+            friendItems.forEach(item => { if (item.type !== 'text' && item.url) jobs.push({ item, source: 'friend' }); });
+
+            let cursor = 0;
+            let checked = 0;
+            let repaired = 0;
+            let failed = 0;
+            const changedSources = new Set();
+            const updateProgress = () => {
+                status.textContent = currentLang === 'zh'
+                    ? `正在扫描 ${checked}/${jobs.length}，已修复 ${repaired} 个…`
+                    : `Scanning ${checked}/${jobs.length}, repaired ${repaired}…`;
+            };
+            updateProgress();
+
+            const worker = async () => {
+                while (cursor < jobs.length) {
+                    const job = jobs[cursor++];
+                    const currentIconWorks = job.item.iconUrl ? await imageCanLoad(job.item.iconUrl) : false;
+                    if (!currentIconWorks) {
+                        const discovered = await discoverWebsiteIcon(job.item.url);
+                        if (discovered) {
+                            job.item.iconUrl = discovered;
+                            repaired += 1;
+                            changedSources.add(job.source);
+                        } else {
+                            failed += 1;
+                        }
+                    }
+                    checked += 1;
+                    updateProgress();
+                }
+            };
+
+            try {
+                await Promise.all(Array.from({ length: Math.min(4, Math.max(1, jobs.length)) }, worker));
+                let cloudSaved = true;
+                if (changedSources.has('dynamic')) cloudSaved = (await updateCloudConfig('dynamicSections', cloudConfig.dynamicSections)) && cloudSaved;
+                if (changedSources.has('custom')) {
+                    const response = await fetch('/api/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(customItems) });
+                    cloudSaved = response.ok && cloudSaved;
+                    localStorage.setItem('nav_custom_links', JSON.stringify(customItems));
+                    loadedCustomLinks = customItems;
+                }
+                if (changedSources.has('friend')) localStorage.setItem('nav_friend_links', JSON.stringify(friendItems));
+                renderDynamicSections();
+                loadCustomLinks();
+                loadFriendLinks();
+                status.textContent = currentLang === 'zh'
+                    ? `扫描完成：修复 ${repaired} 个，仍未找到 ${failed} 个${cloudSaved ? '' : '，部分云端保存失败'}。`
+                    : `Complete: repaired ${repaired}; ${failed} still missing${cloudSaved ? '' : '; some cloud saves failed'}.`;
+            } catch (error) {
+                status.textContent = currentLang === 'zh' ? '扫描中断，请检查网络后重试。' : 'Scan interrupted. Check your connection and try again.';
+            } finally {
+                button.disabled = false;
+            }
+        }
+
         function t(key) { return i18n[currentLang][key] || key; }
         function setLanguage(lang) {
             currentLang = lang; localStorage.setItem('nav_lang', lang); document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
