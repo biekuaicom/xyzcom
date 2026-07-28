@@ -748,9 +748,21 @@
             }).join('');
         }
 
+        function restoreDynamicSectionOrder() {
+            const grid = document.getElementById('main-nav-grid');
+            const addBtnCard = document.getElementById('add-section-card');
+            (cloudConfig.dynamicSections || []).forEach(sec => {
+                const sectionCard = document.getElementById(`section-${sec.id}`);
+                if (sectionCard) grid.insertBefore(sectionCard, addBtnCard);
+            });
+        }
+
         function activateArea(targetId, button) {
             const card = document.getElementById(targetId);
             if (!card) return;
+
+            // 每次选择前先恢复原始顺序，保证上一个临时置顶的区域回到原位。
+            restoreDynamicSectionOrder();
 
             document.querySelectorAll('.area-nav-button').forEach(item => {
                 item.classList.remove('is-active');
@@ -764,7 +776,11 @@
             const color = getComputedStyle(button).getPropertyValue('--area-color').trim() || '#6366f1';
             button.classList.add('is-active');
             button.setAttribute('aria-current', 'true');
-            button.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            const areaNavigation = document.getElementById('area-navigation');
+            areaNavigation.scrollTo({
+                left: button.offsetLeft - (areaNavigation.clientWidth - button.offsetWidth) / 2,
+                behavior: 'smooth'
+            });
 
             // 自定义区域被选择后，临时移动到“常用推荐”之前。
             if (targetId.startsWith('section-')) {
@@ -777,9 +793,6 @@
 
             card.style.setProperty('--active-area-color', color);
             card.classList.add('area-card-active');
-            requestAnimationFrame(() => {
-                card.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-            });
         }
 
         function renderDynamicSections() {
