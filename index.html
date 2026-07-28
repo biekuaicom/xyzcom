@@ -748,9 +748,13 @@
             }).join('');
         }
 
-        function restoreDynamicSectionOrder() {
+        function restoreOriginalSectionOrder() {
             const grid = document.getElementById('main-nav-grid');
             const addBtnCard = document.getElementById('add-section-card');
+            ['card-recommend', 'card-develop', 'card-custom'].forEach(cardId => {
+                const defaultCard = document.getElementById(cardId);
+                if (defaultCard) grid.insertBefore(defaultCard, addBtnCard);
+            });
             (cloudConfig.dynamicSections || []).forEach(sec => {
                 const sectionCard = document.getElementById(`section-${sec.id}`);
                 if (sectionCard) grid.insertBefore(sectionCard, addBtnCard);
@@ -762,7 +766,7 @@
             if (!card) return;
 
             // 每次选择前先恢复原始顺序，保证上一个临时置顶的区域回到原位。
-            restoreDynamicSectionOrder();
+            restoreOriginalSectionOrder();
 
             document.querySelectorAll('.area-nav-button').forEach(item => {
                 item.classList.remove('is-active');
@@ -782,13 +786,10 @@
                 behavior: 'smooth'
             });
 
-            // 自定义区域被选择后，临时移动到“常用推荐”之前。
-            if (targetId.startsWith('section-')) {
-                const grid = document.getElementById('main-nav-grid');
-                const recommendCard = document.getElementById('card-recommend');
-                if (recommendCard.previousElementSibling !== card) {
-                    grid.insertBefore(card, recommendCard);
-                }
+            // 所有区域采用一致行为：当前选中项临时移动到网格第一位。
+            const grid = document.getElementById('main-nav-grid');
+            if (grid.firstElementChild !== card) {
+                grid.insertBefore(card, grid.firstElementChild);
             }
 
             card.style.setProperty('--active-area-color', color);
