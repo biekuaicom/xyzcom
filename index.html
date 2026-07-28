@@ -96,6 +96,10 @@
             outline: 3px solid var(--area-color);
             outline-offset: 2px;
         }
+        .area-nav-button.area-nav-dragging {
+            opacity: 0.45;
+            transform: scale(0.96);
+        }
         .area-card-active {
             border: 2px solid var(--active-area-color, #6366f1) !important;
             box-shadow: 0 0 0 3px color-mix(in srgb, var(--active-area-color, #6366f1) 22%, transparent),
@@ -400,7 +404,8 @@
         let currentTextIndex = null;
         
         // 全局云端配置中心：整合了壁纸、分类区域 和 【新增】管理员密码
-        let cloudConfig = { wallpaper: "", dynamicSections: [], adminPwd: "" };
+        let cloudConfig = { wallpaper: "", dynamicSections: [], sectionOrder: [], adminPwd: "" };
+        let draggedAreaTarget = null;
 
         let dragType = null; 
         let dragSecId = null; 
@@ -565,6 +570,10 @@
                 if(fromIdx > -1 && toIdx > -1) {
                     const [moved] = secs.splice(fromIdx, 1);
                     secs.splice(toIdx, 0, moved);
+                    const dynamicOrder = secs.map(sec => `section-${sec.id}`);
+                    let dynamicIndex = 0;
+                    cloudConfig.sectionOrder = getStoredSectionOrder().map(id => id.startsWith('section-') ? dynamicOrder[dynamicIndex++] : id);
+                    localStorage.setItem('nav_section_order', JSON.stringify(cloudConfig.sectionOrder));
                 }
             } 
             else if (dragType === 'link' && type === 'link') {
@@ -596,6 +605,7 @@
             const globalDefaultBg = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop"; 
             let savedBg = localStorage.getItem('nav_custom_wallpaper');
             cloudConfig.dynamicSections = JSON.parse(localStorage.getItem('nav_dynamic_sections') || '[]');
+            cloudConfig.sectionOrder = JSON.parse(localStorage.getItem('nav_section_order') || '[]');
             
             try {
                 const res = await fetch('/api/config');
@@ -607,6 +617,7 @@
                             else { savedBg = configData.wallpaper; localStorage.setItem('nav_custom_wallpaper', savedBg); document.body.classList.remove('bg-cleared'); }
                         }
                         if (configData.dynamicSections) { cloudConfig.dynamicSections = configData.dynamicSections; localStorage.setItem('nav_dynamic_sections', JSON.stringify(cloudConfig.dynamicSections)); }
+                        if (Array.isArray(configData.sectionOrder)) { cloudConfig.sectionOrder = configData.sectionOrder; localStorage.setItem('nav_section_order', JSON.stringify(cloudConfig.sectionOrder)); }
                         if (configData.adminPwd) { cloudConfig.adminPwd = configData.adminPwd; }
                     }
                 }
@@ -642,6 +653,7 @@
                 },
                 state: {
                     dynamicSections: JSON.parse(JSON.stringify(cloudConfig.dynamicSections || [])),
+                    sectionOrder: JSON.parse(JSON.stringify(getStoredSectionOrder())),
                     customLinks: JSON.parse(JSON.stringify(customLinks || [])),
                     friendLinks: JSON.parse(localStorage.getItem('nav_friend_links') || '[]'),
                     wallpaper: localStorage.getItem('nav_custom_wallpaper') || cloudConfig.wallpaper || '',
@@ -736,7 +748,8 @@
             const restoredConfig = {
                 ...cloudConfig,
                 wallpaper: snapshot.state.wallpaper || '',
-                dynamicSections: snapshot.state.dynamicSections
+                dynamicSections: snapshot.state.dynamicSections,
+                sectionOrder: Array.isArray(snapshot.state.sectionOrder) ? snapshot.state.sectionOrder : []
             };
             const configResponse = await fetch('/api/config', {
                 method: 'POST',
@@ -751,6 +764,7 @@
             if (!configResponse.ok || !linksResponse.ok) throw new Error('Restore request failed');
 
             localStorage.setItem('nav_dynamic_sections', JSON.stringify(snapshot.state.dynamicSections));
+            localStorage.setItem('nav_section_order', JSON.stringify(snapshot.state.sectionOrder || []));
             localStorage.setItem('nav_custom_links', JSON.stringify(snapshot.state.customLinks));
             localStorage.setItem('nav_friend_links', JSON.stringify(snapshot.state.friendLinks));
             localStorage.setItem('nav_theme_mode', snapshot.state.theme || 'theme-dark');
@@ -904,19 +918,74 @@
                     <i class="fas fa-layer-group mr-1.5"></i>${safeTitle}
                 </button>`;
             }).join('');
+            setupAreaNavigationDragging();
+            applyStoredSectionOrder();
+        }
+
+        function getStoredSectionOrder() {
+            const available = ['card-recommend', 'card-develop', 'card-custom', ...(cloudConfig.dynamicSections || []).map(sec => `section-${sec.id}`)];
+            const saved = Array.isArray(cloudConfig.sectionOrder) ? cloudConfig.sectionOrder : [];
+            return [...saved.filter(id => available.includes(id)), ...available.filter(id => !saved.includes(id))];
+        }
+
+        function applyStoredSectionOrder() {
+            const grid = document.getElementById('main-nav-grid');
+            const addBtnCard = document.getElementById('add-section-card');
+            getStoredSectionOrder().forEach((targetId, index) => {
+                const card = document.getElementById(targetId);
+                if (card) grid.insertBefore(card, addBtnCard);
+                const button = document.querySelector(`.area-nav-button[data-area-target="${targetId}"]`);
+                if (button) button.style.order = String(index);
+            });
+        }
+
+        function setupAreaNavigationDragging() {
+            document.querySelectorAll('.area-nav-button').forEach(button => {
+                button.draggable = true;
+                button.ondragstart = handleAreaNavigationDragStart;
+                button.ondragend = handleAreaNavigationDragEnd;
+                button.ondragover = event => event.preventDefault();
+                button.ondrop = handleAreaNavigationDrop;
+                button.title = localStorage.getItem('nav_admin_auth') === 'true'
+                    ? (currentLang === 'zh' ? '拖拽调整区域顺序' : 'Drag to reorder sections')
+                    : '';
+            });
+        }
+
+        function handleAreaNavigationDragStart(event) {
+            if (localStorage.getItem('nav_admin_auth') !== 'true') {
+                event.preventDefault();
+                return;
+            }
+            draggedAreaTarget = event.currentTarget.dataset.areaTarget;
+            event.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => event.currentTarget.classList.add('area-nav-dragging'), 0);
+        }
+
+        function handleAreaNavigationDragEnd(event) {
+            event.currentTarget.classList.remove('area-nav-dragging');
+            draggedAreaTarget = null;
+        }
+
+        function handleAreaNavigationDrop(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (localStorage.getItem('nav_admin_auth') !== 'true' || !draggedAreaTarget) return;
+            const targetId = event.currentTarget.dataset.areaTarget;
+            if (!targetId || targetId === draggedAreaTarget) return;
+            const order = getStoredSectionOrder();
+            const fromIndex = order.indexOf(draggedAreaTarget);
+            if (fromIndex < 0 || !order.includes(targetId)) return;
+            const [moved] = order.splice(fromIndex, 1);
+            order.splice(order.indexOf(targetId), 0, moved);
+            cloudConfig.sectionOrder = order;
+            localStorage.setItem('nav_section_order', JSON.stringify(order));
+            updateCloudConfig('sectionOrder', order);
+            applyStoredSectionOrder();
         }
 
         function restoreOriginalSectionOrder() {
-            const grid = document.getElementById('main-nav-grid');
-            const addBtnCard = document.getElementById('add-section-card');
-            ['card-recommend', 'card-develop', 'card-custom'].forEach(cardId => {
-                const defaultCard = document.getElementById(cardId);
-                if (defaultCard) grid.insertBefore(defaultCard, addBtnCard);
-            });
-            (cloudConfig.dynamicSections || []).forEach(sec => {
-                const sectionCard = document.getElementById(`section-${sec.id}`);
-                if (sectionCard) grid.insertBefore(sectionCard, addBtnCard);
-            });
+            applyStoredSectionOrder();
         }
 
         function activateArea(targetId, button) {
@@ -960,7 +1029,7 @@
                 const linkCount = sec.links.length;
                 const isCompact = linkCount > 6;
 
-                let gridCols = isCompact ? 'grid-cols-3 gap-2' : 'grid-cols-2 gap-3';
+                let gridCols = isCompact ? 'grid-cols-2 gap-2' : 'grid-cols-2 gap-3';
                 let visibleLinks = sec.links;
                 let showExpandBtn = false;
 
@@ -989,7 +1058,7 @@
                     const iconSizeClass = isCompact ? 'w-4 h-4 text-[9px]' : 'w-5 h-5 text-[10px]';
                     const imgSizeClass = isCompact ? 'w-4 h-4' : 'w-5 h-5';
                     const textSizeClass = isCompact ? 'text-[11px]' : 'text-sm';
-                    const prClass = isCompact ? 'pr-12' : 'pr-14';
+                    const prClass = isCompact ? 'pr-1' : 'pr-14';
                     const dragMrClass = isCompact ? 'mr-1.5' : 'mr-2.5';
                     const btnClass = isCompact ? 'text-[10px] px-1 py-0.5' : 'text-xs p-1';
 
@@ -998,8 +1067,8 @@
                         const displayIcon = createLinkIcon(link, displayName, imgSizeClass, isCompact ? 'text-[9px]' : 'text-[10px]');
                         const isTextItem = link.type === 'text';
                         const itemContent = isTextItem
-                            ? `<button type="button" onclick="openTextViewer('section_${sec.id}', ${idx})" class="flex items-center ${spaceXClass} truncate w-full ${prClass} text-left">${displayIcon}<span class="${textSizeClass} font-medium truncate">${displayName}</span></button>`
-                            : `<a href="${link.url}" draggable="false" target="_blank" rel="noopener noreferrer" class="flex items-center ${spaceXClass} truncate w-full ${prClass}">${displayIcon}<span class="${textSizeClass} font-medium truncate">${displayName}</span></a>`;
+                            ? `<button type="button" onclick="openTextViewer('section_${sec.id}', ${idx})" class="flex items-center ${spaceXClass} min-w-0 w-full ${prClass} text-left">${displayIcon}<span class="${textSizeClass} min-w-0 flex-1 font-medium break-all leading-tight">${displayName}</span></button>`
+                            : `<a href="${link.url}" draggable="false" target="_blank" rel="noopener noreferrer" class="flex items-center ${spaceXClass} min-w-0 w-full ${prClass}">${displayIcon}<span class="${textSizeClass} min-w-0 flex-1 font-medium break-all leading-tight">${displayName}</span></a>`;
                         const editAction = isTextItem
                             ? `openTextEditor('section_${sec.id}', ${idx})`
                             : `openEditLinkModal(event, 'section', '${sec.id}', ${idx})`;
@@ -1423,7 +1492,7 @@
             }
 
             const isCompact = links.length > 6;
-            container.className = isCompact ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-3';
+            container.className = isCompact ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-2 gap-3';
 
             let visibleLinks = links;
             let showExpandBtn = false;
@@ -1431,15 +1500,15 @@
 
             const pClass = isCompact ? 'p-2' : 'p-3'; const spaceXClass = isCompact ? 'space-x-1.5' : 'space-x-2.5';
             const iconSizeClass = isCompact ? 'w-4 h-4 text-[9px]' : 'w-5 h-5 text-[10px]'; const imgSizeClass = isCompact ? 'w-4 h-4' : 'w-5 h-5';
-            const textSizeClass = isCompact ? 'text-[11px]' : 'text-sm'; const prClass = isCompact ? 'pr-12' : 'pr-14'; const btnClass = isCompact ? 'text-[10px] px-1 py-0.5' : 'text-xs p-1';
+            const textSizeClass = isCompact ? 'text-[11px]' : 'text-sm'; const prClass = isCompact ? 'pr-1' : 'pr-14'; const btnClass = isCompact ? 'text-[10px] px-1 py-0.5' : 'text-xs p-1';
 
             visibleLinks.forEach((item, index) => {
                 const displayName = getLocalizedLinkName(item.name, item.url);
                 const displayIcon = createLinkIcon(item, displayName, imgSizeClass, isCompact ? 'text-[9px]' : 'text-[10px]');
                 const isTextItem = item.type === 'text';
                 const itemContent = isTextItem
-                    ? `<button type="button" onclick="openTextViewer('custom', ${index})" class="flex items-center ${spaceXClass} truncate w-full ${prClass} text-left">${displayIcon}<span class="${textSizeClass} font-medium truncate">${displayName}</span></button>`
-                    : `<a href="${item.url}" draggable="false" target="_blank" rel="noopener noreferrer" class="flex items-center ${spaceXClass} truncate w-full ${prClass}">${displayIcon}<span class="${textSizeClass} font-medium truncate">${displayName}</span></a>`;
+                    ? `<button type="button" onclick="openTextViewer('custom', ${index})" class="flex items-center ${spaceXClass} min-w-0 w-full ${prClass} text-left">${displayIcon}<span class="${textSizeClass} min-w-0 flex-1 font-medium break-all leading-tight">${displayName}</span></button>`
+                    : `<a href="${item.url}" draggable="false" target="_blank" rel="noopener noreferrer" class="flex items-center ${spaceXClass} min-w-0 w-full ${prClass}">${displayIcon}<span class="${textSizeClass} min-w-0 flex-1 font-medium break-all leading-tight">${displayName}</span></a>`;
                 const editAction = isTextItem
                     ? `openTextEditor('custom', ${index})`
                     : `openEditLinkModal(event, 'custom', '', ${index})`;
