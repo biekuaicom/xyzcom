@@ -106,6 +106,14 @@
         body:not(.is-admin) .admin-only {
             display: none !important;
         }
+        body.mode-clean #card-recommend,
+        body.mode-clean #card-develop,
+        body.mode-clean #card-custom,
+        body.mode-clean .area-nav-button[data-area-target="card-recommend"],
+        body.mode-clean .area-nav-button[data-area-target="card-develop"],
+        body.mode-clean .area-nav-button[data-area-target="card-custom"] {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="theme-dark font-sans antialiased selection:bg-indigo-500 selection:text-white">
@@ -127,6 +135,11 @@
                 <button onclick="setBaseTheme('theme-light')" class="flex-1 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs text-center hover:bg-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1"><i class="fas fa-sun text-amber-500"></i> <span data-i18n="themeLight">日间</span></button>
                 <button onclick="setBaseTheme('theme-dark')" class="flex-1 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs text-center hover:bg-slate-700 transition-colors cursor-pointer flex items-center justify-center gap-1"><i class="fas fa-moon text-indigo-400"></i> <span data-i18n="themeDark">夜间</span></button>
             </div>
+            <div class="text-[11px] font-bold text-slate-400 px-1 pt-1" data-i18n="layoutTitle">区域显示模式</div>
+            <div class="flex gap-2">
+                <button id="layout-initial-btn" onclick="setLayoutMode('initial')" class="flex-1 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs text-center hover:bg-slate-700 transition-colors cursor-pointer"><i class="fas fa-table-cells mr-1 text-indigo-400"></i><span data-i18n="layoutInitial">初始模式</span></button>
+                <button id="layout-clean-btn" onclick="setLayoutMode('clean')" class="flex-1 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs text-center hover:bg-slate-700 transition-colors cursor-pointer"><i class="fas fa-wind mr-1 text-cyan-400"></i><span data-i18n="layoutClean">清爽模式</span></button>
+            </div>
             
             <div class="admin-only space-y-1.5 px-1 border-t border-slate-800 pt-3 mt-1">
                 <div class="flex justify-between items-center">
@@ -137,6 +150,9 @@
                     <input type="text" id="custom-bg-input" data-i18n-placeholder="bgInputPlace" placeholder="输入图片网址 https://..." class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
                     <button onclick="applyCustomBg()" class="bg-indigo-600 text-white px-2 py-1 rounded-lg text-xs hover:bg-indigo-500 cursor-pointer shrink-0" data-i18n="applyBtn">应用</button>
                 </div>
+                <button type="button" onclick="document.getElementById('local-bg-file').click()" class="w-full py-1.5 rounded-lg bg-fuchsia-600/20 border border-fuchsia-500/30 text-fuchsia-300 text-[11px] hover:bg-fuchsia-600/35 cursor-pointer"><i class="fas fa-upload mr-1"></i><span data-i18n="uploadBg">上传本地背景</span></button>
+                <input type="file" id="local-bg-file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" onchange="uploadLocalBackground(event)">
+                <p class="text-[10px] text-slate-500" data-i18n="uploadBgHint">图片会自动压缩并同步到全站</p>
             </div>
             
             <!-- 【新增】修改管理员密码区域 (仅管理员可见) -->
@@ -157,9 +173,10 @@
                 <textarea id="restore-note" data-i18n-placeholder="restoreNotePlace" placeholder="备注（可选）" rows="2" class="w-full resize-none bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"></textarea>
                 <button type="button" onclick="createSiteRestorePoint()" class="w-full py-1.5 rounded-lg bg-cyan-600/20 border border-cyan-500/30 text-cyan-300 text-[11px] hover:bg-cyan-600/35 transition-colors cursor-pointer" data-i18n="createRestore">创建站点恢复点</button>
                 <div class="flex gap-1.5">
-                    <select id="restore-point-list" class="min-w-0 flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-cyan-500"></select>
+                    <select id="restore-point-list" onchange="showRestorePointDetails()" class="min-w-0 flex-1 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-[11px] text-slate-200 focus:outline-none focus:border-cyan-500"></select>
                     <button type="button" onclick="restoreSavedPoint()" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-amber-600/20 border border-amber-500/30 text-amber-300 text-[11px] hover:bg-amber-600/35 cursor-pointer" data-i18n="restoreSaved">恢复</button>
                 </div>
+                <div id="restore-point-details" class="hidden rounded-lg bg-slate-800/70 border border-slate-700/60 px-2.5 py-2 text-[10px] leading-5 text-slate-400 whitespace-pre-wrap break-words"></div>
                 <div class="grid grid-cols-2 gap-1.5">
                     <button type="button" onclick="exportCurrentRestorePoint()" class="py-1.5 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-[11px] hover:bg-indigo-600/35 cursor-pointer" data-i18n="exportRestore">导出当前状态</button>
                     <button type="button" onclick="document.getElementById('restore-file-input').click()" class="py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-[11px] hover:bg-emerald-600/35 cursor-pointer" data-i18n="importRestore">导入恢复点</button>
@@ -392,7 +409,7 @@
         const i18n = {
             zh: {
                 pageTitle: "别快智控-智能多功能响应式导航", langTitle: "语言 / Language", themeTitle: "基础色彩模式 (本地偏好)",
-                themeLight: "日间", themeDark: "夜间", bgTitle: "自定义背景 (全站同步)", bgInputPlace: "输入图片网址 https://...",
+                themeLight: "日间", themeDark: "夜间", layoutTitle: "区域显示模式", layoutInitial: "初始模式", layoutClean: "清爽模式", bgTitle: "自定义背景 (全站同步)", bgInputPlace: "输入图片网址 https://...", uploadBg: "上传本地背景", uploadBgHint: "图片会自动压缩并同步到全站",
                 applyBtn: "应用", clearBg: "清除壁纸", logoutBtn: "退出后台管理", weatherLoading: "正在定位测算天气...",
                 restoreTitle: "站点恢复点", restoreNamePlace: "恢复点名称", restoreNotePlace: "备注（可选）", createRestore: "创建站点恢复点", restoreSaved: "恢复", exportRestore: "导出当前状态", importRestore: "导入恢复点", noRestorePoints: "暂无恢复点",
                 enGoogle: "谷歌 Google", enBing: "必应 Bing", enBaidu: "百度 Baidu", searchGoogle: "在 Google 中搜索...", searchBing: "在 必应 Bing 中搜索...", searchBaidu: "在 百度 Baidu 中搜索...", searchGithub: "在 GitHub 中搜索仓库...",
@@ -411,7 +428,7 @@
             },
             en: {
                 pageTitle: "TechShare - Smart Responsive Nav", langTitle: "Language / 语言", themeTitle: "Color Theme (Local Pref)",
-                themeLight: "Light", themeDark: "Dark", bgTitle: "Custom Wallpaper (Cloud Sync)", bgInputPlace: "Image URL https://...",
+                themeLight: "Light", themeDark: "Dark", layoutTitle: "Section Display Mode", layoutInitial: "Initial Mode", layoutClean: "Clean Mode", bgTitle: "Custom Wallpaper (Cloud Sync)", bgInputPlace: "Image URL https://...", uploadBg: "Upload Local Background", uploadBgHint: "The image is compressed and synced to the site",
                 applyBtn: "Apply", clearBg: "Clear Wallpaper", logoutBtn: "Logout Admin", weatherLoading: "Fetching weather...",
                 restoreTitle: "Site Restore Points", restoreNamePlace: "Restore point name", restoreNotePlace: "Notes (optional)", createRestore: "Create Restore Point", restoreSaved: "Restore", exportRestore: "Export Current State", importRestore: "Import Restore Point", noRestorePoints: "No restore points",
                 enGoogle: "Google", enBing: "Bing", enBaidu: "Baidu", searchGoogle: "Search in Google...", searchBing: "Search in Bing...", searchBaidu: "Search in Baidu...", searchGithub: "Search in GitHub...",
@@ -602,7 +619,10 @@
 
         async function updateCloudConfig(key, value) {
             cloudConfig[key] = value;
-            try { await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cloudConfig) }); } catch (e) { }
+            try {
+                const response = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cloudConfig) });
+                return response.ok;
+            } catch (e) { return false; }
         }
 
         async function captureSiteSnapshot() {
@@ -626,6 +646,7 @@
                     friendLinks: JSON.parse(localStorage.getItem('nav_friend_links') || '[]'),
                     wallpaper: localStorage.getItem('nav_custom_wallpaper') || cloudConfig.wallpaper || '',
                     theme: localStorage.getItem('nav_theme_mode') || 'theme-dark',
+                    layoutMode: localStorage.getItem('nav_layout_mode') || 'initial',
                     language: localStorage.getItem('nav_lang') || 'zh'
                 }
             };
@@ -647,15 +668,32 @@
                 option.textContent = t('noRestorePoints');
                 select.appendChild(option);
                 select.disabled = true;
+                document.getElementById('restore-point-details').classList.add('hidden');
                 return;
             }
             select.disabled = false;
             points.forEach((point, index) => {
                 const option = document.createElement('option');
                 option.value = String(index);
-                option.textContent = `${point.meta.name} · ${point.meta.date}`;
+                const note = point.meta.note ? ` · ${point.meta.note.replace(/\s+/g, ' ').slice(0, 40)}` : '';
+                option.textContent = `${point.meta.name} · ${point.meta.date}${note}`;
                 select.appendChild(option);
             });
+            showRestorePointDetails();
+        }
+
+        function showRestorePointDetails() {
+            const details = document.getElementById('restore-point-details');
+            const point = getSavedRestorePoints()[Number(document.getElementById('restore-point-list').value)];
+            if (!point) {
+                details.classList.add('hidden');
+                return;
+            }
+            const note = point.meta.note || (currentLang === 'zh' ? '无备注' : 'No notes');
+            details.textContent = currentLang === 'zh'
+                ? `名称：${point.meta.name}\n日期：${point.meta.date}\n备注：${note}`
+                : `Name: ${point.meta.name}\nDate: ${point.meta.date}\nNotes: ${note}`;
+            details.classList.remove('hidden');
         }
 
         async function createSiteRestorePoint() {
@@ -716,6 +754,7 @@
             localStorage.setItem('nav_custom_links', JSON.stringify(snapshot.state.customLinks));
             localStorage.setItem('nav_friend_links', JSON.stringify(snapshot.state.friendLinks));
             localStorage.setItem('nav_theme_mode', snapshot.state.theme || 'theme-dark');
+            localStorage.setItem('nav_layout_mode', snapshot.state.layoutMode || 'initial');
             localStorage.setItem('nav_lang', snapshot.state.language || 'zh');
             if (snapshot.state.wallpaper) localStorage.setItem('nav_custom_wallpaper', snapshot.state.wallpaper);
             else localStorage.removeItem('nav_custom_wallpaper');
@@ -746,7 +785,54 @@
 
         function toggleThemeMenu(e) { e.stopPropagation(); document.getElementById('theme-panel').classList.toggle('hidden'); }
         function setBaseTheme(themeName) { document.body.classList.remove('theme-light', 'theme-dark'); document.body.classList.add(themeName); localStorage.setItem('nav_theme_mode', themeName); document.getElementById('theme-panel').classList.add('hidden'); }
+        function setLayoutMode(mode, closePanel = true) {
+            const clean = mode === 'clean';
+            document.body.classList.toggle('mode-clean', clean);
+            localStorage.setItem('nav_layout_mode', clean ? 'clean' : 'initial');
+            document.getElementById('layout-initial-btn').classList.toggle('ring-1', !clean);
+            document.getElementById('layout-initial-btn').classList.toggle('ring-indigo-400', !clean);
+            document.getElementById('layout-clean-btn').classList.toggle('ring-1', clean);
+            document.getElementById('layout-clean-btn').classList.toggle('ring-cyan-400', clean);
+            if (clean) {
+                ['card-recommend', 'card-develop', 'card-custom'].forEach(cardId => {
+                    document.getElementById(cardId)?.classList.remove('area-card-active');
+                });
+                document.querySelectorAll('.area-nav-button[data-area-target^="card-"]').forEach(button => button.classList.remove('is-active'));
+            }
+            if (closePanel) document.getElementById('theme-panel').classList.add('hidden');
+        }
         function applyWallpaperStyles(url) { document.body.style.backgroundImage = `url('${url}')`; document.body.style.backgroundPosition = 'center'; document.body.style.backgroundSize = 'cover'; document.body.style.backgroundRepeat = 'no-repeat'; document.body.style.backgroundAttachment = 'fixed'; document.body.classList.add('has-custom-bg'); }
+
+        async function uploadLocalBackground(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            try {
+                const bitmap = await createImageBitmap(file);
+                const maxDimension = 1920;
+                const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+                canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+                canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                bitmap.close();
+                const dataUrl = canvas.toDataURL('image/webp', 0.82);
+                if (dataUrl.length > 3_000_000) {
+                    alert(currentLang === 'zh' ? '图片压缩后仍然过大，请选择更小的图片。' : 'The compressed image is still too large. Please choose a smaller image.');
+                    return;
+                }
+                applyWallpaperStyles(dataUrl);
+                localStorage.setItem('nav_custom_wallpaper', dataUrl);
+                document.body.classList.remove('bg-cleared');
+                document.getElementById('clear-bg-btn').classList.remove('hidden');
+                const synced = await updateCloudConfig('wallpaper', dataUrl);
+                document.getElementById('theme-panel').classList.add('hidden');
+                if (!synced) alert(currentLang === 'zh' ? '背景已在当前浏览器应用，但云端同步失败。' : 'The background was applied locally, but cloud sync failed.');
+            } catch (error) {
+                alert(currentLang === 'zh' ? '无法读取此图片，请换一张图片重试。' : 'Could not read this image. Please try another one.');
+            } finally {
+                event.target.value = '';
+            }
+        }
 
         async function applyCustomBg() {
             const url = document.getElementById('custom-bg-input').value.trim();
@@ -1407,6 +1493,7 @@
         // --- 初始化运转 ---
         document.addEventListener('click', () => { document.getElementById('engine-menu').classList.add('hidden'); document.getElementById('theme-panel').classList.add('hidden'); });
         document.getElementById('restore-date').value = new Date().toISOString().slice(0, 10);
+        setLayoutMode(localStorage.getItem('nav_layout_mode') || 'initial', false);
         checkAdminSession(); document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en'; applyLanguage(); updateClockAndGreeting(); fetchWeather(); initCloudData();
     </script>
 </body>
