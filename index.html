@@ -79,16 +79,6 @@
         }
 
         /* 区域快捷导航 */
-        #area-navigation {
-            scrollbar-width: thin;
-            scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
-        }
-        #area-navigation::-webkit-scrollbar { height: 5px; }
-        #area-navigation::-webkit-scrollbar-track { background: transparent; }
-        #area-navigation::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.35);
-            border-radius: 999px;
-        }
         .area-nav-button {
             --area-color: #6366f1;
             background: var(--area-color);
@@ -223,7 +213,7 @@
 
         <!-- 导航卡片网格 -->
         <nav aria-label="区域导航" class="w-full mb-8 relative z-20">
-            <div id="area-navigation" class="glass-card rounded-2xl px-4 py-3 flex items-center gap-2.5 overflow-x-auto">
+            <div id="area-navigation" class="glass-card rounded-2xl px-4 py-3 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
                 <button type="button" class="area-nav-button shrink-0 rounded-xl px-4 py-2 text-sm font-semibold whitespace-nowrap transition-all" style="--area-color:#4f46e5" data-area-target="card-recommend" onclick="activateArea('card-recommend', this)">
                     <i class="fas fa-star mr-1.5"></i><span data-i18n="cardRec">常用推荐</span>
                 </button>
@@ -780,11 +770,6 @@
             const color = getComputedStyle(button).getPropertyValue('--area-color').trim() || '#6366f1';
             button.classList.add('is-active');
             button.setAttribute('aria-current', 'true');
-            const areaNavigation = document.getElementById('area-navigation');
-            areaNavigation.scrollTo({
-                left: button.offsetLeft - (areaNavigation.clientWidth - button.offsetWidth) / 2,
-                behavior: 'smooth'
-            });
 
             // 所有区域采用一致行为：当前选中项临时移动到网格第一位。
             const grid = document.getElementById('main-nav-grid');
