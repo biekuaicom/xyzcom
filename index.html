@@ -378,6 +378,7 @@
         let currentModalTarget = 'custom'; 
         let currentEngineKey = 'google';
         let loadedCustomLinks = [];
+        let customLinksLoaded = false;
         let currentTextTarget = 'custom';
         let currentTextIndex = null;
         
@@ -1025,6 +1026,76 @@
         function selectEngine(key) { currentEngineKey = key; const form = document.getElementById('search-form'); const input = document.getElementById('search-input'); const icon = document.getElementById('engine-icon'); form.action = engines[key].action; input.name = engines[key].name; input.setAttribute('data-i18n-placeholder', engines[key].placeholderKey); input.placeholder = t(engines[key].placeholderKey); icon.className = engines[key].icon; document.getElementById('engine-menu').classList.add('hidden'); }
 
         // --- 8. 原站长推荐 ---
+        function normalizeItemName(name) {
+            return String(name || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+        }
+
+        function normalizeItemUrl(url) {
+            try {
+                const parsed = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`);
+                parsed.hash = '';
+                parsed.hostname = parsed.hostname.toLowerCase();
+                if (parsed.pathname !== '/') parsed.pathname = parsed.pathname.replace(/\/+$/, '');
+                return parsed.toString().replace(/\/$/, '');
+            } catch (error) {
+                return String(url || '').trim().replace(/\/+$/, '').toLowerCase();
+            }
+        }
+
+        function collectAllSiteItems() {
+            const items = [];
+            ['card-recommend', 'card-develop'].forEach(cardId => {
+                const card = document.getElementById(cardId);
+                if (!card) return;
+                const area = card.querySelector('h3 span')?.textContent.trim() || cardId;
+                card.querySelectorAll('a[href]').forEach(anchor => {
+                    items.push({ name: anchor.querySelector('span')?.textContent.trim() || anchor.textContent.trim(), url: anchor.href, area, source: cardId, index: -1 });
+                });
+            });
+
+            const customItems = customLinksLoaded ? loadedCustomLinks : JSON.parse(localStorage.getItem('nav_custom_links') || '[]');
+            customItems.forEach((item, index) => items.push({ ...item, area: t('cardCustom'), source: 'custom', index }));
+
+            (cloudConfig.dynamicSections || []).forEach(section => {
+                (section.links || []).forEach((item, index) => items.push({ ...item, area: section.title, source: `section_${section.id}`, index }));
+            });
+
+            let friendItems = JSON.parse(localStorage.getItem('nav_friend_links') || '[]');
+            if (!friendItems.length) friendItems = [ { name: "IT头条博客", url: "https://it-toutiao.blogspot.com" }, { name: "科技共享导航", url: "https://kjgx.168668520.xyz" } ];
+            friendItems.forEach((item, index) => items.push({ ...item, area: t('cardFriend'), source: 'friend', index }));
+            return items;
+        }
+
+        function findDuplicateItems(name, url, exclusion, checkUrl) {
+            const normalizedName = normalizeItemName(name);
+            const normalizedUrl = checkUrl ? normalizeItemUrl(url) : '';
+            const conflicts = [];
+            collectAllSiteItems().forEach(item => {
+                if (exclusion && item.source === exclusion.source && item.index === exclusion.index) return;
+                if (normalizedName && normalizeItemName(item.name) === normalizedName && !conflicts.some(entry => entry.field === 'name')) {
+                    conflicts.push({ field: 'name', area: item.area });
+                }
+                if (checkUrl && item.type !== 'text' && item.url && normalizeItemUrl(item.url) === normalizedUrl && !conflicts.some(entry => entry.field === 'url')) {
+                    conflicts.push({ field: 'url', area: item.area });
+                }
+            });
+            return conflicts;
+        }
+
+        function showDuplicateWarning(conflicts) {
+            if (!conflicts.length) return false;
+            const message = conflicts.map(conflict => {
+                const field = currentLang === 'zh'
+                    ? (conflict.field === 'name' ? '名称' : '网址')
+                    : (conflict.field === 'name' ? 'Name' : 'URL');
+                return currentLang === 'zh'
+                    ? `${field}已经存在于“${conflict.area}”区域，请修改后再保存。`
+                    : `${field} already exists in “${conflict.area}”. Please change it before saving.`;
+            }).join('\n');
+            alert(message);
+            return true;
+        }
+
         function getQuickTextItem(target, index) {
             if (target.startsWith('section_')) {
                 const sectionId = target.replace('section_', '');
@@ -1063,6 +1134,8 @@
                 return;
             }
             if (iconUrl && !/^https?:\/\//i.test(iconUrl)) iconUrl = 'https://' + iconUrl;
+            const textExclusion = currentTextIndex === null ? null : { source: currentTextTarget, index: currentTextIndex };
+            if (showDuplicateWarning(findDuplicateItems(name, '', textExclusion, false))) return;
             const item = iconUrl ? { type: 'text', name, content, iconUrl } : { type: 'text', name, content };
 
             if (currentTextTarget.startsWith('section_')) {
@@ -1196,6 +1269,16 @@
             if(!name || !url) return alert(currentLang === 'zh' ? '请完整填写名称和网址！' : 'Please fill in both name and URL!');
             if(!/^https?:\/\//i.test(url)) url = 'https://' + url;
             if(iconUrl && !/^https?:\/\//i.test(iconUrl)) iconUrl = 'https://' + iconUrl;
+            let linkExclusion = null;
+            if (currentModalTarget.startsWith('edit_section_')) {
+                const match = currentModalTarget.match(/^edit_section_(.+)_(\d+)$/);
+                if (match) linkExclusion = { source: `section_${match[1]}`, index: Number(match[2]) };
+            } else if (currentModalTarget.startsWith('edit_friend_')) {
+                linkExclusion = { source: 'friend', index: Number(currentModalTarget.replace('edit_friend_', '')) };
+            } else if (currentModalTarget.startsWith('edit_custom_')) {
+                linkExclusion = { source: 'custom', index: Number(currentModalTarget.replace('edit_custom_', '')) };
+            }
+            if (showDuplicateWarning(findDuplicateItems(name, url, linkExclusion, true))) return;
             const linkData = iconUrl ? { name, url, iconUrl } : { name, url };
 
             if (currentModalTarget.startsWith('edit_section_')) {
@@ -1243,6 +1326,7 @@
             container.innerHTML = `<div class="col-span-full text-center text-xs text-slate-400/60 py-10"><i class="fas fa-spinner fa-spin"></i> ${t('loadingCloud')}</div>`;
             let links = []; try { const res = await fetch('/api/links'); if(res.ok) links = await res.json(); else throw new Error(); } catch(e) { links = JSON.parse(localStorage.getItem('nav_custom_links') || '[]'); }
             loadedCustomLinks = links;
+            customLinksLoaded = true;
             container.innerHTML = '';
             
             if(links.length === 0) { 
