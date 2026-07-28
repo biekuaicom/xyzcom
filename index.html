@@ -1029,7 +1029,7 @@
                 const linkCount = sec.links.length;
                 const isCompact = linkCount > 6;
 
-                let gridCols = isCompact ? 'grid-cols-2 gap-2' : 'grid-cols-2 gap-3';
+                let gridCols = isCompact ? 'grid-cols-3 gap-2' : 'grid-cols-2 gap-3';
                 let visibleLinks = sec.links;
                 let showExpandBtn = false;
 
@@ -1492,7 +1492,7 @@
             }
 
             const isCompact = links.length > 6;
-            container.className = isCompact ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-2 gap-3';
+            container.className = isCompact ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-3';
 
             let visibleLinks = links;
             let showExpandBtn = false;
