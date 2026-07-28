@@ -302,6 +302,11 @@
                     <label class="text-xs text-slate-400 block mb-1.5 font-medium" data-i18n="siteUrl">网站网址 (URL)</label>
                     <input type="text" id="site-url" placeholder="www.baidu.com" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-all">
                 </div>
+                <div>
+                    <label class="text-xs text-slate-400 block mb-1.5 font-medium" data-i18n="siteIconUrl">手动图标地址（可选）</label>
+                    <input type="text" id="site-icon-url" data-i18n-placeholder="siteIconUrlPlace" placeholder="https://example.com/favicon.png" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-all">
+                    <p class="mt-1 text-[10px] text-slate-500" data-i18n="siteIconHint">留空时自动获取网站图标</p>
+                </div>
             </div>
             <div class="flex justify-end space-x-3">
                 <button type="button" onclick="toggleModal(false)" class="px-4 py-2 bg-slate-800 text-slate-400 text-xs font-medium rounded-xl hover:bg-slate-700 transition-colors cursor-pointer" data-i18n="btnCancel">取消</button>
@@ -337,7 +342,7 @@
                 linkBlog: "抖音", linkBili: "哔哩哔哩", linkZhihu: "知乎", linkWeibo: "微博", linkJuejin: "稀土掘金",
                 addCloud: "添加 (云端)", addLocal: "添加 (本地)", expandMore: "展开显示更多", collapseMore: "收起部分站点",
                 footerText: "&copy; 2026 别快智控-智能生态导航 · Powered by Cloudflare", adminBadge: "已登入",
-                modalAddCloud: "添加云端站长推荐", modalAddFriend: "添加友情链接", siteName: "网站名称", siteNamePlace: "例如：百度", siteUrl: "网站网址 (URL)",
+                modalAddCloud: "添加云端站长推荐", modalAddFriend: "添加友情链接", siteName: "网站名称", siteNamePlace: "例如：百度", siteUrl: "网站网址 (URL)", siteIconUrl: "手动图标地址（可选）", siteIconUrlPlace: "https://example.com/favicon.png", siteIconHint: "留空时自动获取网站图标",
                 btnCancel: "取消", btnSave: "保存站点", noCloudLinks: "暂无自定义链接", loadingCloud: "正在从云端加载...",
                 delConfirm: "确定要删除这个链接吗？", pwdPrompt: "🔐 请输入后台管理员安全密码：", pwdSuccess: "🎉 认证成功！管理功能已全部解锁。", pwdFail: "❌ 密码错误，鉴权失败！", logoutMsg: "🔒 已安全退出管理后台，页面回归只读状态。",
                 weatherCloudy: "多云", weatherClear: "晴朗", weatherRain: "阵雨", weatherSnow: "降雪", weatherThunder: "雷阵雨", weatherDefault: "风调雨顺 · 晴", validUrlMsg: "提示：请输入有效的网址！",
@@ -355,7 +360,7 @@
                 linkBlog: "douyin", linkBili: "Bilibili", linkZhihu: "Zhihu", linkWeibo: "Weibo", linkJuejin: "Juejin",
                 addCloud: "Add (Cloud)", addLocal: "Add (Local)", expandMore: "Show More", collapseMore: "Collapse",
                 footerText: "&copy; 2026 biekuai.com · Powered by Cloudflare", adminBadge: "Logged In",
-                modalAddCloud: "Add Cloud Link", modalAddFriend: "Add Friend Link", siteName: "Site Name", siteNamePlace: "e.g., Google", siteUrl: "Site URL",
+                modalAddCloud: "Add Cloud Link", modalAddFriend: "Add Friend Link", siteName: "Site Name", siteNamePlace: "e.g., Google", siteUrl: "Site URL", siteIconUrl: "Manual Icon URL (optional)", siteIconUrlPlace: "https://example.com/favicon.png", siteIconHint: "Leave blank to fetch the site icon automatically",
                 btnCancel: "Cancel", btnSave: "Save Site", noCloudLinks: "No custom links yet", loadingCloud: "Loading from cloud...",
                 delConfirm: "Are you sure you want to delete this link?", pwdPrompt: "🔐 Enter Admin Password:", pwdSuccess: "🎉 Authenticated! Admin features unlocked.", pwdFail: "❌ Incorrect password!", logoutMsg: "🔒 Logged out safely. Read-only mode activated.",
                 weatherCloudy: "Cloudy", weatherClear: "Clear", weatherRain: "Rain", weatherSnow: "Snow", weatherThunder: "Thunder", weatherDefault: "Good Weather · Clear", validUrlMsg: "Please enter a valid URL!",
@@ -374,6 +379,23 @@
         function getLocalizedLinkName(originalName, url) {
             if (url && dynamicLinkDict[url]) return dynamicLinkDict[url][currentLang];
             return originalName;
+        }
+        function escapeAttribute(value) {
+            return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        }
+        function createLinkIcon(link, displayName, sizeClass, textSizeClass) {
+            let iconUrl = link.iconUrl || '';
+            if (!iconUrl) {
+                try { iconUrl = `https://unavatar.io/duckduckgo/${new URL(link.url).hostname}`; } catch (error) {}
+            }
+            const initial = escapeAttribute((displayName || '?').charAt(0).toUpperCase());
+            const image = iconUrl
+                ? `<img src="${escapeAttribute(iconUrl)}" draggable="false" onerror="this.remove()" class="absolute inset-0 w-full h-full rounded object-contain bg-slate-800" alt="" />`
+                : '';
+            return `<div class="${sizeClass} relative rounded shrink-0">
+                <span class="absolute inset-0 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold ${textSizeClass}">${initial}</span>
+                ${image}
+            </div>`;
         }
         function t(key) { return i18n[currentLang][key] || key; }
         function setLanguage(lang) {
@@ -827,8 +849,7 @@
 
                     visibleLinks.forEach((link, idx) => {
                         const displayName = getLocalizedLinkName(link.name, link.url);
-                        let displayIcon = `<div class="${iconSizeClass} rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold shrink-0">${displayName.charAt(0).toUpperCase()}</div>`;
-                        try { if(link.url) displayIcon = `<img src="https://unavatar.io/duckduckgo/${new URL(link.url).hostname}" draggable="false" onerror="this.style.display='none'" class="${imgSizeClass} rounded object-contain shrink-0" alt="icon" />`; } catch(e){}
+                        const displayIcon = createLinkIcon(link, displayName, imgSizeClass, isCompact ? 'text-[9px]' : 'text-[10px]');
 
                         linksHtml += `
                         <div class="group relative flex items-center justify-between ${pClass} bg-slate-500/5 border border-slate-500/10 rounded-xl hover:bg-indigo-600/10 transition-all"
@@ -963,21 +984,24 @@
             document.getElementById('modal-title-text').innerText = t('modalEditLink');
             document.getElementById('site-name').value = link.name;
             document.getElementById('site-url').value = link.url;
+            document.getElementById('site-icon-url').value = link.iconUrl || '';
         }
-        function toggleModal(show) { const modal = document.getElementById('modal'); if (show) { document.getElementById('site-name').value = ''; document.getElementById('site-url').value = ''; modal.classList.remove('hidden'); } else { modal.classList.add('hidden'); } }
+        function toggleModal(show) { const modal = document.getElementById('modal'); if (show) { document.getElementById('site-name').value = ''; document.getElementById('site-url').value = ''; document.getElementById('site-icon-url').value = ''; modal.classList.remove('hidden'); } else { modal.classList.add('hidden'); } }
         function closeModalOnBlank(e) { if(e.target.id === 'modal') toggleModal(false); }
 
         async function saveActiveLink() {
-            const name = document.getElementById('site-name').value.trim(); let url = document.getElementById('site-url').value.trim();
+            const name = document.getElementById('site-name').value.trim(); let url = document.getElementById('site-url').value.trim(); let iconUrl = document.getElementById('site-icon-url').value.trim();
             if(!name || !url) return alert(currentLang === 'zh' ? '请完整填写名称和网址！' : 'Please fill in both name and URL!');
             if(!/^https?:\/\//i.test(url)) url = 'https://' + url;
+            if(iconUrl && !/^https?:\/\//i.test(iconUrl)) iconUrl = 'https://' + iconUrl;
+            const linkData = iconUrl ? { name, url, iconUrl } : { name, url };
 
             if (currentModalTarget.startsWith('edit_section_')) {
                 const match = currentModalTarget.match(/^edit_section_(.+)_(\d+)$/);
                 if (match) {
                     const sec = (cloudConfig.dynamicSections || []).find(item => item.id === match[1]);
                     if (sec && sec.links[Number(match[2])]) {
-                        sec.links[Number(match[2])] = { name, url };
+                        sec.links[Number(match[2])] = linkData;
                         saveDynamicSections(cloudConfig.dynamicSections);
                     }
                 }
@@ -985,7 +1009,7 @@
                 const index = Number(currentModalTarget.replace('edit_friend_', ''));
                 let links = JSON.parse(localStorage.getItem('nav_friend_links') || '[]');
                 if (links.length === 0) links = [ { name: "IT头条博客", url: "https://it-toutiao.blogspot.com" }, { name: "科技共享导航", url: "https://kjgx.168668520.xyz" } ];
-                if (links[index]) links[index] = { name, url };
+                if (links[index]) links[index] = linkData;
                 localStorage.setItem('nav_friend_links', JSON.stringify(links));
                 loadFriendLinks();
             } else if (currentModalTarget.startsWith('edit_custom_')) {
@@ -995,7 +1019,7 @@
                     const res = await fetch('/api/links');
                     if (res.ok) links = await res.json();
                 } catch (error) {}
-                if (links[index]) links[index] = { name, url };
+                if (links[index]) links[index] = linkData;
                 try {
                     await fetch('/api/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(links) });
                 } catch (error) {}
@@ -1003,12 +1027,12 @@
                 loadCustomLinks();
             } else if (currentModalTarget.startsWith('section_')) {
                 const secId = currentModalTarget.replace('section_', ''); let secs = cloudConfig.dynamicSections || []; const sec = secs.find(s => s.id === secId);
-                if(sec) { sec.links.push({ name, url }); saveDynamicSections(secs); }
+                if(sec) { sec.links.push(linkData); saveDynamicSections(secs); }
             } else if(currentModalTarget === 'friend') {
-                let links = JSON.parse(localStorage.getItem('nav_friend_links') || '[]'); links.push({ name, url }); localStorage.setItem('nav_friend_links', JSON.stringify(links)); loadFriendLinks();
+                let links = JSON.parse(localStorage.getItem('nav_friend_links') || '[]'); links.push(linkData); localStorage.setItem('nav_friend_links', JSON.stringify(links)); loadFriendLinks();
             } else {
-                try { const res = await fetch('/api/links'); let links = res.ok ? await res.json() : JSON.parse(localStorage.getItem('nav_custom_links') || '[]'); links.push({ name, url }); await fetch('/api/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(links) }); localStorage.setItem('nav_custom_links', JSON.stringify(links)); loadCustomLinks(); } 
-                catch (error) { const links = JSON.parse(localStorage.getItem('nav_custom_links') || '[]'); links.push({ name, url }); localStorage.setItem('nav_custom_links', JSON.stringify(links)); loadCustomLinks(); }
+                try { const res = await fetch('/api/links'); let links = res.ok ? await res.json() : JSON.parse(localStorage.getItem('nav_custom_links') || '[]'); links.push(linkData); await fetch('/api/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(links) }); localStorage.setItem('nav_custom_links', JSON.stringify(links)); loadCustomLinks(); }
+                catch (error) { const links = JSON.parse(localStorage.getItem('nav_custom_links') || '[]'); links.push(linkData); localStorage.setItem('nav_custom_links', JSON.stringify(links)); loadCustomLinks(); }
             } toggleModal(false);
         }
 
@@ -1039,8 +1063,7 @@
 
             visibleLinks.forEach((item, index) => {
                 const displayName = getLocalizedLinkName(item.name, item.url);
-                let displayIcon = `<div class="${iconSizeClass} rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold shrink-0">${displayName.charAt(0).toUpperCase()}</div>`;
-                try { if(item.url) displayIcon = `<img src="https://unavatar.io/duckduckgo/${new URL(item.url).hostname}" draggable="false" onerror="this.style.display='none'" class="${imgSizeClass} rounded object-contain shrink-0" alt="icon" />`; } catch(err){}
+                const displayIcon = createLinkIcon(item, displayName, imgSizeClass, isCompact ? 'text-[9px]' : 'text-[10px]');
                 
                 container.innerHTML += `
                     <div class="group relative flex items-center justify-between ${pClass} bg-slate-500/5 border border-slate-500/10 rounded-xl hover:bg-indigo-600/10 transition-all">
@@ -1070,9 +1093,10 @@
             if(links.length === 0) { links = [ { name: "IT头条博客", url: "https://it-toutiao.blogspot.com" }, { name: "科技共享导航", url: "https://kjgx.168668520.xyz" } ]; }
             links.forEach((item, index) => {
                 const displayName = getLocalizedLinkName(item.name, item.url);
+                const displayIcon = createLinkIcon(item, displayName, 'w-4 h-4', 'text-[8px]');
                 container.innerHTML += `
                     <div class="group relative flex items-center justify-between p-2.5 bg-slate-500/5 border border-slate-500/10 rounded-xl hover:bg-emerald-600/10 transition-all text-center">
-                        <a href="${item.url}" draggable="false" target="_blank" rel="noopener noreferrer" class="w-full text-xs font-medium text-slate-400 hover:text-emerald-400 transition-colors truncate pl-2 pr-12">${displayName}</a>
+                        <a href="${item.url}" draggable="false" target="_blank" rel="noopener noreferrer" class="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-slate-400 hover:text-emerald-400 transition-colors truncate pl-2 pr-12">${displayIcon}<span class="truncate">${displayName}</span></a>
                         <div class="admin-only absolute right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button type="button" aria-label="${t('modalEditLink')}" onclick="openEditLinkModal(event, 'friend', '', ${index})" class="text-[10px] text-sky-400 hover:text-sky-300 bg-slate-700/80 px-1 rounded cursor-pointer"><i class="fas fa-pen"></i></button>
                             <button type="button" aria-label="${t('delConfirm')}" onclick="deleteFriendLink(event, ${index})" class="text-[10px] text-slate-500 hover:text-red-400 bg-slate-700/80 px-1 rounded cursor-pointer"><i class="fas fa-times"></i></button>
