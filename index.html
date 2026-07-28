@@ -100,6 +100,11 @@
             opacity: 0.45;
             transform: scale(0.96);
         }
+        #area-navigation.area-nav-reordering {
+            outline: 2px dashed rgba(129, 140, 248, 0.75);
+            outline-offset: 3px;
+            background: rgba(79, 70, 229, 0.1);
+        }
         .area-card-active {
             border: 2px solid var(--active-area-color, #6366f1) !important;
             box-shadow: 0 0 0 3px color-mix(in srgb, var(--active-area-color, #6366f1) 22%, transparent),
@@ -406,6 +411,8 @@
         // 全局云端配置中心：整合了壁纸、分类区域 和 【新增】管理员密码
         let cloudConfig = { wallpaper: "", dynamicSections: [], sectionOrder: [], adminPwd: "" };
         let draggedAreaTarget = null;
+        let previewAreaOrder = null;
+        let areaDropCommitted = false;
 
         let dragType = null; 
         let dragSecId = null; 
@@ -929,23 +936,61 @@
         }
 
         function applyStoredSectionOrder() {
+            applySectionOrder(getStoredSectionOrder(), false);
+        }
+
+        function applySectionOrder(order, animate = true) {
             const grid = document.getElementById('main-nav-grid');
             const addBtnCard = document.getElementById('add-section-card');
-            getStoredSectionOrder().forEach((targetId, index) => {
+            const elements = [
+                ...document.querySelectorAll('.area-nav-button'),
+                ...order.map(id => document.getElementById(id)).filter(Boolean)
+            ];
+            const previousPositions = animate
+                ? new Map(elements.map(element => [element, element.getBoundingClientRect()]))
+                : null;
+
+            order.forEach((targetId, index) => {
                 const card = document.getElementById(targetId);
                 if (card) grid.insertBefore(card, addBtnCard);
                 const button = document.querySelector(`.area-nav-button[data-area-target="${targetId}"]`);
                 if (button) button.style.order = String(index);
             });
+
+            if (animate) {
+                requestAnimationFrame(() => {
+                    elements.forEach(element => {
+                        const previous = previousPositions.get(element);
+                        const current = element.getBoundingClientRect();
+                        const deltaX = previous.left - current.left;
+                        const deltaY = previous.top - current.top;
+                        if (!deltaX && !deltaY) return;
+                        element.getAnimations().forEach(animation => {
+                            if (animation.id === 'section-reorder') animation.cancel();
+                        });
+                        const animation = element.animate(
+                            [
+                                { transform: `translate(${deltaX}px, ${deltaY}px)` },
+                                { transform: 'translate(0, 0)' }
+                            ],
+                            { duration: 280, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }
+                        );
+                        animation.id = 'section-reorder';
+                    });
+                });
+            }
         }
 
         function setupAreaNavigationDragging() {
+            const navigation = document.getElementById('area-navigation');
+            navigation.ondragover = handleAreaNavigationDragOver;
+            navigation.ondrop = handleAreaNavigationDrop;
             document.querySelectorAll('.area-nav-button').forEach(button => {
                 button.draggable = true;
                 button.ondragstart = handleAreaNavigationDragStart;
                 button.ondragend = handleAreaNavigationDragEnd;
-                button.ondragover = event => event.preventDefault();
-                button.ondrop = handleAreaNavigationDrop;
+                button.ondragover = null;
+                button.ondrop = null;
                 button.title = localStorage.getItem('nav_admin_auth') === 'true'
                     ? (currentLang === 'zh' ? '拖拽调整区域顺序' : 'Drag to reorder sections')
                     : '';
@@ -958,30 +1003,57 @@
                 return;
             }
             draggedAreaTarget = event.currentTarget.dataset.areaTarget;
+            restoreOriginalSectionOrder();
+            previewAreaOrder = getStoredSectionOrder();
+            areaDropCommitted = false;
             event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', draggedAreaTarget);
+            document.getElementById('area-navigation').classList.add('area-nav-reordering');
             setTimeout(() => event.currentTarget.classList.add('area-nav-dragging'), 0);
         }
 
         function handleAreaNavigationDragEnd(event) {
             event.currentTarget.classList.remove('area-nav-dragging');
+            document.getElementById('area-navigation').classList.remove('area-nav-reordering');
+            if (!areaDropCommitted) applyStoredSectionOrder();
             draggedAreaTarget = null;
+            previewAreaOrder = null;
+            areaDropCommitted = false;
+        }
+
+        function handleAreaNavigationDragOver(event) {
+            event.preventDefault();
+            if (localStorage.getItem('nav_admin_auth') !== 'true' || !draggedAreaTarget) return;
+            event.dataTransfer.dropEffect = 'move';
+
+            const candidates = [...document.querySelectorAll('.area-nav-button')]
+                .filter(button => button.dataset.areaTarget !== draggedAreaTarget && button.offsetParent !== null);
+            if (!candidates.length) return;
+            const nearest = candidates.reduce((best, button) => {
+                const rect = button.getBoundingClientRect();
+                const distance = Math.hypot(event.clientX - (rect.left + rect.width / 2), event.clientY - (rect.top + rect.height / 2));
+                return !best || distance < best.distance ? { button, rect, distance } : best;
+            }, null);
+            const targetId = nearest.button.dataset.areaTarget;
+            const nextOrder = [...(previewAreaOrder || getStoredSectionOrder())].filter(id => id !== draggedAreaTarget);
+            let insertIndex = nextOrder.indexOf(targetId);
+            const sameRow = event.clientY >= nearest.rect.top - 8 && event.clientY <= nearest.rect.bottom + 8;
+            if (sameRow && event.clientX > nearest.rect.left + nearest.rect.width / 2) insertIndex += 1;
+            nextOrder.splice(Math.max(0, insertIndex), 0, draggedAreaTarget);
+            if (JSON.stringify(nextOrder) === JSON.stringify(previewAreaOrder)) return;
+            previewAreaOrder = nextOrder;
+            applySectionOrder(previewAreaOrder, true);
         }
 
         function handleAreaNavigationDrop(event) {
             event.preventDefault();
             event.stopPropagation();
-            if (localStorage.getItem('nav_admin_auth') !== 'true' || !draggedAreaTarget) return;
-            const targetId = event.currentTarget.dataset.areaTarget;
-            if (!targetId || targetId === draggedAreaTarget) return;
-            const order = getStoredSectionOrder();
-            const fromIndex = order.indexOf(draggedAreaTarget);
-            if (fromIndex < 0 || !order.includes(targetId)) return;
-            const [moved] = order.splice(fromIndex, 1);
-            order.splice(order.indexOf(targetId), 0, moved);
-            cloudConfig.sectionOrder = order;
-            localStorage.setItem('nav_section_order', JSON.stringify(order));
-            updateCloudConfig('sectionOrder', order);
-            applyStoredSectionOrder();
+            if (localStorage.getItem('nav_admin_auth') !== 'true' || !draggedAreaTarget || !previewAreaOrder) return;
+            areaDropCommitted = true;
+            cloudConfig.sectionOrder = [...previewAreaOrder];
+            localStorage.setItem('nav_section_order', JSON.stringify(cloudConfig.sectionOrder));
+            updateCloudConfig('sectionOrder', cloudConfig.sectionOrder);
+            applySectionOrder(cloudConfig.sectionOrder, true);
         }
 
         function restoreOriginalSectionOrder() {
