@@ -442,6 +442,7 @@
         let draggedAreaTarget = null;
         let previewAreaOrder = null;
         let areaDropCommitted = false;
+        let activeAreaTarget = null;
 
         let dragType = null; 
         let dragSecId = null; 
@@ -1122,6 +1123,7 @@
             if(!confirm(t('delSectionConfirm'))) return;
             let secs = cloudConfig.dynamicSections || [];
             secs = secs.filter(s => s.id !== id);
+            if (activeAreaTarget === `section-${id}`) activeAreaTarget = null;
             saveDynamicSections(secs);
         }
 
@@ -1289,6 +1291,17 @@
         function activateArea(targetId, button) {
             const card = document.getElementById(targetId);
             if (!card) return;
+            activeAreaTarget = targetId;
+            applyActiveAreaState(button);
+        }
+
+        function applyActiveAreaState(button) {
+            const card = document.getElementById(activeAreaTarget);
+            if (!card) return;
+            if (!button) {
+                button = document.querySelector(`.area-nav-button[data-area-target="${activeAreaTarget}"]`);
+            }
+            if (!button) return;
 
             // 每次选择前先恢复原始顺序，保证上一个临时置顶的区域回到原位。
             restoreOriginalSectionOrder();
@@ -1430,6 +1443,8 @@
             });
             renderAreaNavigation();
             checkAdminSession();
+            // 重新渲染后保留当前选中区域（临时置顶 + 高亮），避免“展开显示更多”导致位置回退。
+            if (activeAreaTarget) applyActiveAreaState();
         }
 
         function deleteSectionLink(e, secId, linkIdx) {
